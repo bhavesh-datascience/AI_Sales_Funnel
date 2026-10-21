@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zeal Sales Funnel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        // Theme: saved choice, else the system setting. Runs before first paint so there's no flash.
+        (function () {
+            let saved = null;
+            try { saved = localStorage.getItem('theme'); } catch (e) { /* storage unavailable */ }
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.dataset.theme = saved || (prefersDark ? 'dark' : 'light');
+
+            // If the login session expires, any API call answers 401: go back to the login page
+            const originalFetch = window.fetch.bind(window);
+            window.fetch = async function (input, init) {
+                const response = await originalFetch(input, init);
+                const url = typeof input === 'string' ? input : input.url;
+                if (response.status === 401 && url.startsWith('/api/') && url !== '/api/login') {
+                    window.location.href = '/login';
+                }
+                return response;
+            };
+
+            document.addEventListener('DOMContentLoaded', function () {
+                const name = document.getElementById('userName').textContent.trim();
+                document.getElementById('userAvatar').textContent = (name.charAt(0) || '?').toUpperCase();
+                document.getElementById('logoutBtn').addEventListener('click', async function () {
+                    try { await originalFetch('/api/logout', { method: 'POST' }); } finally { window.location.href = '/login'; }
+                });
+
+                const btn = document.getElementById('themeToggle');
+                const label = () => btn.title = document.documentElement.dataset.theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+                label();
+                btn.addEventListener('click', function () {
+                    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+                    document.documentElement.dataset.theme = next;
+                    try { localStorage.setItem('theme', next); } catch (e) { /* storage unavailable */ }
+                    label();
+                });
+            });
+        })();
+    </script>
+</head>
+
+<body>
+    <div class="layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">Z</div>
+                <span class="logo-text">Zeal Sales Funnel</span>
+            </div>
+
+            <nav class="nav-menu">
+                <div class="nav-section">
+                    <a href="#" class="nav-item active" data-view="dashboard">
+                        <i data-lucide="layout-dashboard"></i>
+                        <span>Dashboard</span>
+                    </a>
+                    <a href="#" class="nav-item" data-view="analytics">
+                        <i data-lucide="pie-chart"></i>
+                        <span>Analytics</span>
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <h3 class="nav-title">MAIN MENU</h3>
+                    <a href="#" class="nav-item" data-view="email-sending">
+                        <i data-lucide="send"></i>
+                        <span>Email Sending</span>
+                    </a>
+                    <a href="#" class="nav-item" data-view="bulk-email">
+                        <i data-lucide="mails"></i>
+                        <span>Bulk Email</span>
+                    </a>
+                    <a href="#" class="nav-item" data-view="inbox">
+                        <i data-lucide="inbox"></i>
+                        <span>Inbox</span>
+                    </a>
+                    <a href="#" class="nav-item" data-view="followup">
+                        <i data-lucide="clock"></i>
+                        <span>Follow-ups</span>
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <h3 class="nav-title">ACCOUNT</h3>
+                    <a href="#" class="nav-item">
+                        <i data-lucide="user"></i>
+                        <span>My Account</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <i data-lucide="settings"></i>
+                        <span>Settings</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <i data-lucide="help-circle"></i>
+                        <span>Help</span>
+                    </a>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <div class="search-bar">
+                    <i data-lucide="search"></i>
+                    <input type="text" placeholder="Search for anything...">
+                </div>
+                <div class="header-actions">
+                    <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">
+                        <i data-lucide="moon" class="icon-moon"></i>
+                        <i data-lucide="sun" class="icon-sun"></i>
+                    </button>
+                    <button class="icon-btn">
+                        <i data-lucide="bell"></i>
+                        <span class="indicator"></span>
+                    </button>
+                    <div class="user-profile">
+                        <div class="avatar" id="userAvatar"></div>
+                        <div class="user-info">
+                            <span class="user-name" id="userName">{{CURRENT_USER}}</span>
+                            <span class="user-role">Zeal Interactive</span>
+                        </div>
+                    </div>
+                    <button class="logout-btn" id="logoutBtn" title="Log out" aria-label="Log out">
+                        <i data-lucide="log-out"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Dashboard View -->
+            <div id="view-dashboard" class="view-section active">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Dashboard</h1>
+                        <p class="page-subtitle">Live overview of your outreach</p>
+                    </div>
+                    <div class="page-actions">
+                        <span class="muted-text stats-updated"></span>
+                        <button class="btn btn-outline check-replies-btn" title="Search Gmail for replies from everyone you've emailed"><i data-lucide="mail-check"></i> Check replies</button>
+                        <button class="btn btn-outline stats-refresh-btn"><i data-lucide="refresh-cw"></i> Refresh</button>
+                    </div>
+                </div>
+
+                <div class="viz-filters">
+                    <div class="segmented range-filter" role="group" aria-label="Date range">
+                        <button class="segment" data-days="7">Last 7 days</button>
+                        <button class="segment active" data-days="30">Last 30 days</button>
+                        <button class="segment" data-days="90">Last 90 days</button>
+                        <button class="segment" data-days="0">All time</button>
+                    </div>
+                </div>
+                <div class="bulk-alert hidden stats-error"></div>
+
+                <div class="viz-root stats-body">
+                    <div class="stat-tiles">
+                        <div class="stat-tile stat-hero">
+                            <span class="tile-label">Emails sent</span>
+                            <span class="tile-value" data-stat="sent">–</span>
+                            <span class="tile-sub" data-stat="sent-sub"></span>
+                        </div>
+                        <div class="stat-tile">
+                            <span class="tile-label">Reply rate</span>
+                            <span class="tile-value" data-stat="reply-rate">–</span>
+                            <span class="tile-sub" data-stat="reply-sub"></span>
+                        </div>
+                        <div class="stat-tile">
+                            <span class="tile-label">Sent today</span>
+                            <span class="tile-value" data-stat="today">–</span>
+                            <div class="meter" role="meter" aria-label="Daily sending limit used"><div class="meter-fill" data-stat="today-meter"></div></div>
+                            <span class="tile-sub" data-stat="today-sub"></span>
+                        </div>
+                        <div class="stat-tile">
+                            <span class="tile-label">Failed</span>
+                            <span class="tile-value" data-stat="failed">–</span>
+                            <span class="tile-sub" data-stat="failed-sub"></span>
+                        </div>
+                        <div class="stat-tile">
+                            <span class="tile-label">Drafts created</span>
+                            <span class="tile-value" data-stat="drafted">–</span>
+                            <span class="tile-sub" data-stat="drafted-sub"></span>
+                        </div>
+                    </div>
+
+                    <div class="dash-grid">
+                        <div class="viz-card">
+                            <div class="viz-card-head">
+                                <div>
+                                    <h3>Emails per day</h3>
+                                    <div class="viz-legend">
+                                        <span><i class="key key-rect" style="background: var(--viz-1)"></i>Sent</span>
+                                        <span><i class="key key-rect" style="background: var(--viz-critical)"></i>Failed</span>
+                                    </div>
+                                </div>
+                                <button class="btn btn-ghost btn-sm table-toggle">Table</button>
+                            </div>
+                            <div class="viz-chart" id="chartDaily"></div>
+                        </div>
+                        <div class="viz-card">
+                            <div class="viz-card-head">
+                                <div>
+                                    <h3>AI drafts funnel</h3>
+                                    <p class="muted-text">From draft to reply, Email Sending only</p>
+                                </div>
+                            </div>
+                            <div class="viz-chart" id="chartFunnel"></div>
+                        </div>
+                    </div>
+
+                    <div class="dash-grid">
+                        <div class="viz-card">
+                            <div class="viz-card-head">
+                                <div>
+                                    <h3>Recent activity</h3>
+                                </div>
+                            </div>
+                            <div class="table-scroll">
+                                <table class="bulk-table">
+                                    <thead><tr><th>When</th><th>Recipient</th><th>Status</th><th>Channel</th><th>Subject / reason</th></tr></thead>
+                                    <tbody id="recentBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="viz-card">
+                            <div class="viz-card-head">
+                                <div>
+                                    <h3>Sent by channel</h3>
+                                </div>
+                            </div>
+                            <div class="viz-chart" id="chartChannels"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analytics View -->
+            <div id="view-analytics" class="view-section hidden">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Analytics</h1>
+                        <p class="page-subtitle">Trends, campaigns and what's working</p>
+                    </div>
+                    <div class="page-actions">
+                        <span class="muted-text stats-updated"></span>
+                        <button class="btn btn-outline check-replies-btn" title="Search Gmail for replies from everyone you've emailed"><i data-lucide="mail-check"></i> Check replies</button>
+                        <button class="btn btn-outline" id="analyticsExportBtn"><i data-lucide="file-spreadsheet"></i> Export</button>
+                    </div>
+                </div>
+
+                <div class="viz-filters">
+                    <div class="segmented range-filter" role="group" aria-label="Date range">
+                        <button class="segment" data-days="7">Last 7 days</button>
+                        <button class="segment active" data-days="30">Last 30 days</button>
+                        <button class="segment" data-days="90">Last 90 days</button>
+                        <button class="segment" data-days="0">All time</button>
+                    </div>
+                </div>
+                <div class="bulk-alert hidden stats-error"></div>
+
+                <div class="viz-root stats-body">
+                    <div class="stat-tiles">
+                        <div class="stat-tile">
+                            <span class="tile-label">People emailed</span>
+                            <span class="tile-value" data-stat="recipients">–</span>
+                        </div>
+                        <div class="stat-tile">
+                            <span class="tile-label">Replied</span>
+                            <span class="tile-value" data-stat="replied">–</span>
+                            <span class="tile-sub" data-stat="replied-sub"></span>
+                        </div>
+                        <div class="stat-tile">
+                            <span class="tile-label">Skipped</span>
+                            <span class="tile-value" data-stat="skipped">–</span>
+                            <span class="tile-sub">Missing data, invalid or duplicate</span>
+                        </div>
+                        <div class="stat-tile">
+                            <span class="tile-label">Declined drafts</span>
+                            <span class="tile-value" data-stat="declined">–</span>
+                        </div>
+                        <div class="stat-tile">
+                            <span class="tile-label">Inbox replies sent</span>
+                            <span class="tile-value" data-stat="replies-sent">–</span>
+                        </div>
+                    </div>
+
+                    <div class="viz-card">
+                        <div class="viz-card-head">
+                            <div>
+                                <h3>Emails sent and replies received</h3>
+                                <div class="viz-legend">
+                                    <span><i class="key key-line" style="background: var(--viz-1)"></i>Sent</span>
+                                    <span><i class="key key-line" style="background: var(--viz-2)"></i>Replies</span>
+                                </div>
+                            </div>
+                            <button class="btn btn-ghost btn-sm table-toggle">Table</button>
+                        </div>
+                        <div class="viz-chart" id="chartTrend"></div>
+                    </div>
+
+                    <div class="viz-card">
+                        <div class="viz-card-head">
+                            <div>
+                                <h3>Campaigns</h3>
+                                <p class="muted-text">Each AI drafting run and bulk send</p>
+                            </div>
+                        </div>
+                        <div class="table-scroll">
+                            <table class="bulk-table num-table">
+                                <thead><tr><th>Campaign</th><th>Type</th><th>Started</th><th class="num">Sent</th><th class="num">Failed</th><th class="num">Skipped</th><th class="num">Declined</th><th class="num">Replied</th><th class="num">Reply rate</th></tr></thead>
+                                <tbody id="campaignsBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="dash-grid even">
+                        <div class="viz-card">
+                            <div class="viz-card-head">
+                                <div>
+                                    <h3>Why emails didn't send</h3>
+                                    <p class="muted-text">Failures and skips by reason</p>
+                                </div>
+                            </div>
+                            <div class="viz-chart" id="chartReasons"></div>
+                        </div>
+                        <div class="viz-card">
+                            <div class="viz-card-head">
+                                <div>
+                                    <h3>Top recipient domains</h3>
+                                </div>
+                            </div>
+                            <div class="table-scroll">
+                                <table class="bulk-table num-table">
+                                    <thead><tr><th>Domain</th><th class="num">People</th><th class="num">Replied</th><th class="num">Reply rate</th></tr></thead>
+                                    <tbody id="domainsBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Email Sending View -->
+            <div id="view-email-sending" class="view-section hidden">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Email Sending & Automation</h1>
+                        <p class="page-subtitle">Upload leads and generate AI drafts</p>
+                    </div>
+                </div>
+
+                <div class="upload-section">
+                    <div class="upload-card" id="uploadCard">
+                        <i data-lucide="cloud-upload" class="icon-upload"></i>
+                        <h2>Upload your Leads</h2>
+                        <p>Drag and drop your Excel or CSV file here, or click to browse</p>
+                        <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" hidden>
+                        <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">Select
+                            File</button>
+                        <div id="uploadProgress" class="hidden">
+                            <div class="spinner"></div>
+                            <span id="uploadProgressText">Analyzing file...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="config-section hidden" id="configSection" style="margin-top: 24px; padding: 24px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border);">
+                    <h3 style="margin-bottom: 16px;">Configure Draft Generation</h3>
+                    <div style="display: flex; gap: 16px; align-items: flex-end;">
+                        <div style="flex: 1;">
+                            <label style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Select Email Column</label>
+                            <select id="emailColumnSelect" style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border);"></select>
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px;">Number of Drafts (Max: <span id="maxDraftsText">0</span>)</label>
+                            <input type="number" id="numDraftsInput" min="1" value="5" style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                        </div>
+                        <button class="btn btn-primary" id="startDraftingBtn">
+                            <i data-lucide="wand-2"></i> Generate Drafts
+                        </button>
+                    </div>
+                </div>
+
+                <div class="report-bar hidden" id="reportBar">
+                    <div class="report-stats">
+                        <span class="report-title"><i data-lucide="file-bar-chart"></i> Report</span>
+                        <span class="report-chip">Drafted <b id="statDrafted">0</b></span>
+                        <span class="report-chip chip-approved">Approved <b id="statApproved">0</b></span>
+                        <span class="report-chip chip-sent">Sent <b id="statSent">0</b></span>
+                        <span class="report-chip chip-declined">Declined <b id="statDeclined">0</b></span>
+                        <span class="report-chip chip-failed">Failed <b id="statFailed">0</b></span>
+                    </div>
+                    <div class="report-actions">
+                        <button class="btn btn-outline btn-sm" id="viewReportBtn"><i data-lucide="mail"></i> View mails</button>
+                        <button class="btn btn-outline btn-sm" id="exportExcelBtn"><i data-lucide="file-spreadsheet"></i> Export Excel</button>
+                        <button class="btn btn-outline btn-sm" id="exportCsvBtn"><i data-lucide="download"></i> Export CSV</button>
+                        <button class="btn btn-ghost btn-sm" id="clearReportBtn" title="Clear report history">Clear</button>
+                    </div>
+                </div>
+
+                <div class="report-mails hidden" id="reportMails">
+                    <div class="table-scroll">
+                        <table class="bulk-table">
+                            <thead><tr><th>Company</th><th>Contact</th><th>Email</th><th>Status</th><th>Subject</th><th>Updated</th></tr></thead>
+                            <tbody id="reportMailsBody"></tbody>
+                        </table>
+                    </div>
+                    <p class="muted-text">Click a row to read the email.</p>
+                </div>
+
+                <div class="results-section hidden" id="resultsSection">
+                    <div class="results-header">
+                        <h2>Generated Drafts</h2>
+                        <span class="badge" id="resultsCount">0</span>
+                    </div>
+                    <div class="results-grid" id="resultsGrid">
+                        <!-- Cards will be dynamically injected here via JS -->
+                    </div>
+                </div>
+
+                <div class="results-section hidden" id="approvedSection" style="margin-top: 32px;">
+                    <div class="results-header" style="border-bottom-color: var(--success);">
+                        <h2><i data-lucide="check-circle" style="color: var(--success); width: 20px; height: 20px; vertical-align: text-bottom; margin-right: 8px;"></i>Approved Drafts</h2>
+                        <span class="badge badge-success" id="approvedCount" style="background-color: var(--success);">0</span>
+                        <button class="btn btn-primary btn-success" id="sendAllBtn"><i data-lucide="send"></i> Send All Approved</button>
+                    </div>
+                    <div class="send-all-status hidden" id="sendAllStatus">
+                        <div class="spinner"></div>
+                        <span id="sendAllStatusText"></span>
+                        <button class="btn btn-stop btn-sm" id="stopSendAllBtn"><i data-lucide="square"></i> Stop</button>
+                    </div>
+                    <div class="results-grid" id="approvedGrid">
+                        <!-- Approved cards will be moved here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bulk Email View -->
+            <div id="view-bulk-email" class="view-section hidden">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Bulk Email</h1>
+                        <p class="page-subtitle">Send one email to your whole list, personalised with variables</p>
+                    </div>
+                </div>
+
+                <!-- Step 1: recipients -->
+                <div class="bulk-card">
+                    <div class="bulk-step-title"><span class="step-num">1</span> Recipients</div>
+                    <div class="bulk-upload-row">
+                        <input type="file" id="bulkFileInput" accept=".xlsx, .xls, .csv" hidden>
+                        <button class="btn btn-outline" id="bulkUploadBtn"><i data-lucide="upload"></i> Upload Excel / CSV</button>
+                        <span class="muted-text" id="bulkFileName">No file selected</span>
+                    </div>
+                    <div class="form-row hidden" id="bulkColumnRow">
+                        <div class="form-field">
+                            <label for="bulkEmailColumn">Email column</label>
+                            <select id="bulkEmailColumn" class="input"></select>
+                        </div>
+                        <div class="form-field">
+                            <label for="bulkNameColumn">Recipient name column (optional)</label>
+                            <select id="bulkNameColumn" class="input"></select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: compose -->
+                <div class="bulk-card">
+                    <div class="bulk-step-title"><span class="step-num">2</span> Compose</div>
+                    <div class="segmented" role="tablist">
+                        <button class="segment active" data-mode="manual"><i data-lucide="pencil"></i> Write it myself</button>
+                        <button class="segment" data-mode="ai"><i data-lucide="sparkles"></i> Generate with AI</button>
+                    </div>
+
+                    <div class="ai-panel hidden" id="bulkAiPanel">
+                        <div class="form-row">
+                            <div class="form-field">
+                                <label for="bulkCategory">Audience category</label>
+                                <select id="bulkCategory" class="input">
+                                    <option value="Agency">Agency</option>
+                                    <option value="Corporate">Corporate</option>
+                                    <option value="Startup">Startup</option>
+                                    <option value="Small Business">Small Business</option>
+                                    <option value="Educational Institution">Educational Institution</option>
+                                    <option value="NGO / Non-profit">NGO / Non-profit</option>
+                                    <option value="Hospitality & Hotels">Hospitality &amp; Hotels</option>
+                                    <option value="__custom">Other (type your own)</option>
+                                </select>
+                            </div>
+                            <div class="form-field hidden" id="bulkCustomCategoryField">
+                                <label for="bulkCustomCategory">Custom category</label>
+                                <input type="text" id="bulkCustomCategory" class="input" placeholder="e.g. Real estate developers">
+                            </div>
+                        </div>
+                        <div class="form-field">
+                            <label for="bulkInstructions">What should the email be about? (optional)</label>
+                            <textarea id="bulkInstructions" class="input" rows="2" placeholder="e.g. Invite them to book a team-building event for Q4"></textarea>
+                        </div>
+                        <div class="form-field hidden" id="bulkAiVariablesField">
+                            <label>Personalise with (optional)</label>
+                            <div class="variable-chips" id="bulkAiVariables"></div>
+                        </div>
+                        <div class="ai-actions">
+                            <span class="muted-text">You can edit the generated email before sending.</span>
+                            <button class="btn btn-primary" id="bulkGenerateBtn"><i data-lucide="wand-2"></i> Generate Email</button>
+                        </div>
+                    </div>
+
+                    <div class="variables-box hidden" id="bulkVariablesBox">
+                        <div class="variables-head">
+                            <span><i data-lucide="braces"></i> Variables</span>
+                            <span class="muted-text">Click to insert at the cursor. Every variable you use is <b>required</b>: recipients without a value for it will not be emailed.</span>
+                        </div>
+                        <div class="variable-chips" id="bulkVariableChips"></div>
+                    </div>
+
+                    <div class="form-field">
+                        <label for="bulkSubject">Subject</label>
+                        <input type="text" id="bulkSubject" class="input" placeholder="e.g. Team events for {{Company Name}}">
+                    </div>
+                    <div class="form-field">
+                        <label for="bulkBody">Email body</label>
+                        <textarea id="bulkBody" class="input" rows="10" placeholder="Hi {{Contact Name}},&#10;&#10;..."></textarea>
+                    </div>
+                </div>
+
+                <!-- Step 3: review & send -->
+                <div class="bulk-card">
+                    <div class="bulk-step-title"><span class="step-num">3</span> Review &amp; Send</div>
+                    <div class="bulk-alert hidden" id="bulkAlert"></div>
+                    <div class="report-stats" id="bulkStats">
+                        <span class="report-chip">Recipients <b id="bulkStatTotal">0</b></span>
+                        <span class="report-chip chip-sent">Ready <b id="bulkStatReady">0</b></span>
+                        <span class="report-chip chip-declined">Will be skipped <b id="bulkStatSkipped">0</b></span>
+                    </div>
+
+                    <details class="skipped-list hidden" id="bulkSkippedDetails">
+                        <summary>Show skipped recipients</summary>
+                        <table class="bulk-table">
+                            <thead><tr><th>Email</th><th>Reason</th></tr></thead>
+                            <tbody id="bulkSkippedBody"></tbody>
+                        </table>
+                    </details>
+
+                    <div class="preview-box hidden" id="bulkPreview">
+                        <div class="preview-head">
+                            <span>Preview</span>
+                            <div class="preview-nav">
+                                <button class="icon-btn" id="bulkPrevBtn" title="Previous recipient"><i data-lucide="chevron-left"></i></button>
+                                <span id="bulkPreviewIndex">1 / 1</span>
+                                <button class="icon-btn" id="bulkNextBtn" title="Next recipient"><i data-lucide="chevron-right"></i></button>
+                            </div>
+                        </div>
+                        <div class="preview-meta"><b>To:</b> <span id="bulkPreviewTo"></span></div>
+                        <div class="preview-meta"><b>Subject:</b> <span id="bulkPreviewSubject"></span></div>
+                        <div class="preview-body" id="bulkPreviewBody"></div>
+                    </div>
+
+                    <div class="send-all-status hidden" id="bulkSendStatus">
+                        <div class="spinner"></div>
+                        <span id="bulkSendStatusText"></span>
+                        <button class="btn btn-stop btn-sm" id="bulkStopBtn"><i data-lucide="square"></i> Stop</button>
+                    </div>
+
+                    <div class="bulk-send-row">
+                        <span class="muted-text">Emails go out one at a time with a random gap, to keep them out of spam.</span>
+                        <button class="btn btn-primary btn-success" id="bulkSendBtn" disabled><i data-lucide="send"></i> <span>Send to <span id="bulkSendCount">0</span> recipients</span></button>
+                    </div>
+                </div>
+
+                <!-- Results -->
+                <div class="bulk-card hidden" id="bulkResults">
+                    <div class="bulk-results-head">
+                        <div class="report-stats">
+                            <span class="report-title"><i data-lucide="file-bar-chart"></i> Bulk Send Report</span>
+                            <span class="report-chip chip-sent">Sent <b id="bulkResSent">0</b></span>
+                            <span class="report-chip chip-declined">Skipped <b id="bulkResSkipped">0</b></span>
+                            <span class="report-chip chip-failed">Failed <b id="bulkResFailed">0</b></span>
+                            <span class="report-chip">Not sent <b id="bulkResNotSent">0</b></span>
+                        </div>
+                        <div class="report-actions">
+                            <button class="btn btn-outline btn-sm" id="bulkExportExcelBtn"><i data-lucide="file-spreadsheet"></i> Export Excel</button>
+                            <button class="btn btn-outline btn-sm" id="bulkExportCsvBtn"><i data-lucide="download"></i> Export CSV</button>
+                        </div>
+                    </div>
+                    <div class="table-scroll">
+                        <table class="bulk-table">
+                            <thead><tr><th>Email</th><th>Name</th><th>Status</th><th>Subject</th><th>Details</th><th>Time</th></tr></thead>
+                            <tbody id="bulkResultsBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Inbox View -->
+            <div id="view-inbox" class="view-section hidden">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Inbox</h1>
+                        <p class="page-subtitle">Read and reply to your Gmail, and track who replied to your outreach</p>
+                    </div>
+                </div>
+
+                <div class="segmented inbox-tabs">
+                    <button class="segment active" data-inbox-tab="mail"><i data-lucide="inbox"></i> Inbox</button>
+                    <button class="segment" data-inbox-tab="tracker"><i data-lucide="list-checks"></i> Reply Tracker</button>
+                </div>
+
+                <!-- Mail tab -->
+                <div id="inboxMailTab">
+                    <div class="inbox-toolbar">
+                        <div class="inbox-search">
+                            <i data-lucide="search"></i>
+                            <input type="text" id="inboxSearch" placeholder="Search mail, e.g. from:acme.com or is:unread">
+                        </div>
+                        <button class="btn btn-outline" id="inboxRefreshBtn"><i data-lucide="refresh-cw"></i> Refresh</button>
+                    </div>
+                    <div class="bulk-alert hidden" id="inboxError"></div>
+
+                    <div class="inbox-container">
+                        <div class="inbox-sidebar">
+                            <div class="inbox-list" id="inboxList"></div>
+                            <div class="inbox-list-status" id="inboxListStatus"></div>
+                            <button class="btn btn-ghost load-more hidden" id="inboxLoadMore">Load more</button>
+                        </div>
+                        <div class="inbox-content">
+                            <div class="inbox-empty" id="inboxEmpty">
+                                <i data-lucide="mail-open"></i>
+                                <p>Select an email to read it</p>
+                            </div>
+                            <div class="inbox-message hidden" id="inboxMessage">
+                                <div class="email-header">
+                                    <h2 id="msgSubject"></h2>
+                                    <div class="sender-details">
+                                        <div class="avatar" id="msgAvatar"></div>
+                                        <div>
+                                            <div class="name" id="msgFromName"></div>
+                                            <div class="email" id="msgFromEmail"></div>
+                                        </div>
+                                        <div class="msg-date" id="msgDate"></div>
+                                    </div>
+                                </div>
+                                <div class="email-body" id="msgBody"></div>
+                                <div class="msg-attachments hidden" id="msgAttachments"></div>
+                                <div class="email-reply">
+                                    <textarea id="replyBody" placeholder="Write your reply..."></textarea>
+                                    <div class="reply-actions">
+                                        <button class="btn btn-outline" id="aiReplyBtn"><i data-lucide="wand-2"></i> AI Draft</button>
+                                        <button class="btn btn-primary" id="sendReplyBtn"><i data-lucide="send"></i> Send Reply</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reply tracker tab -->
+                <div id="inboxTrackerTab" class="hidden">
+                    <div class="bulk-card">
+                        <div class="bulk-step-title"><span class="step-num">1</span> Upload the list you emailed</div>
+                        <div class="bulk-upload-row">
+                            <input type="file" id="trackerFileInput" accept=".xlsx, .xls, .csv" hidden>
+                            <button class="btn btn-outline" id="trackerUploadBtn"><i data-lucide="upload"></i> Upload Excel / CSV</button>
+                            <span class="muted-text" id="trackerFileName">No file selected</span>
+                        </div>
+                        <div class="form-row hidden" id="trackerOptions">
+                            <div class="form-field">
+                                <label for="trackerEmailColumn">Email column</label>
+                                <select id="trackerEmailColumn" class="input"></select>
+                            </div>
+                            <div class="form-field">
+                                <label for="trackerSince">Only count replies since (optional)</label>
+                                <input type="date" id="trackerSince" class="input">
+                            </div>
+                        </div>
+                        <div class="bulk-send-row">
+                            <span class="muted-text">Searches all of your Gmail, including archived mail, for emails from each address.</span>
+                            <button class="btn btn-primary" id="trackerCheckBtn" disabled><i data-lucide="search-check"></i> Check Replies</button>
+                        </div>
+                        <div class="bulk-alert hidden" id="trackerError"></div>
+                    </div>
+
+                    <div class="bulk-card hidden" id="trackerResults">
+                        <div class="bulk-results-head">
+                            <div class="report-stats">
+                                <span class="report-title"><i data-lucide="file-bar-chart"></i> Reply Report</span>
+                                <span class="report-chip">Checked <b id="trackerStatTotal">0</b></span>
+                                <span class="report-chip chip-sent">Replied <b id="trackerStatReplied">0</b></span>
+                                <span class="report-chip chip-failed">No reply <b id="trackerStatNoReply">0</b></span>
+                                <span class="report-chip chip-approved">Reply rate <b id="trackerStatRate">0%</b></span>
+                            </div>
+                            <div class="report-actions">
+                                <button class="btn btn-outline btn-sm" id="trackerExportExcelBtn"><i data-lucide="file-spreadsheet"></i> Export Excel</button>
+                                <button class="btn btn-outline btn-sm" id="trackerExportCsvBtn"><i data-lucide="download"></i> Export CSV</button>
+                            </div>
+                        </div>
+                        <div class="segmented" id="trackerFilter">
+                            <button class="segment active" data-filter="all">All</button>
+                            <button class="segment" data-filter="replied">Replied</button>
+                            <button class="segment" data-filter="none">No reply</button>
+                        </div>
+                        <div class="table-scroll">
+                            <table class="bulk-table">
+                                <thead><tr><th>Email</th><th>Name</th><th>Status</th><th>Replies</th><th>Last reply</th><th>Subject</th><th></th></tr></thead>
+                                <tbody id="trackerBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Follow-up View -->
+            <div id="view-followup" class="view-section hidden">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Follow-ups</h1>
+                        <p class="page-subtitle">Scheduled emails and reminders</p>
+                    </div>
+                    <button class="btn btn-primary"><i data-lucide="plus"></i> New Follow-up</button>
+                </div>
+                <div class="followup-board">
+                    <div class="board-column">
+                        <h3>Scheduled (3)</h3>
+                        <div class="board-card">
+                            <div class="card-title">Follow up with Dianne</div>
+                            <div class="card-meta"><i data-lucide="calendar"></i> Tomorrow, 9:00 AM</div>
+                        </div>
+                    </div>
+                    <div class="board-column">
+                        <h3>Pending Reply (5)</h3>
+                        <div class="board-card">
+                            <div class="card-title">Check in with Marvin</div>
+                            <div class="card-meta"><i data-lucide="clock"></i> Overdue</div>
+                        </div>
+                    </div>
+                    <div class="board-column">
+                        <h3>Completed (12)</h3>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Template for a result card (for Email Sending) -->
+    <template id="cardTemplate">
+        <div class="draft-card">
+            <div class="card-header-small">
+                <div class="company-info">
+                    <h3 class="company-name">Company Name</h3>
+                    <p class="context-preview">Additional details...</p>
+                </div>
+                <button class="icon-btn copy-btn" title="Copy to clipboard">
+                    <i data-lucide="copy"></i>
+                </button>
+            </div>
+            <div class="card-body-small">
+                <div class="subject-line">
+                    <span class="label">Subject:</span>
+                    <span class="subject-text"></span>
+                </div>
+                <div class="email-body-small">
+                    <textarea readonly class="draft-textarea"></textarea>
+                </div>
+                <div class="regen-panel hidden">
+                    <label class="regen-label">What should change?</label>
+                    <textarea class="input regen-input" rows="2" placeholder="e.g. Make it shorter and mention our corporate offsites"></textarea>
+                    <div class="regen-suggestions">
+                        <button type="button" class="variable-chip">Make it shorter</button>
+                        <button type="button" class="variable-chip">More formal</button>
+                        <button type="button" class="variable-chip">More friendly</button>
+                        <button type="button" class="variable-chip">Stronger call to action</button>
+                        <button type="button" class="variable-chip">New subject line</button>
+                    </div>
+                    <div class="regen-actions">
+                        <button type="button" class="btn btn-ghost regen-cancel">Cancel</button>
+                        <button type="button" class="btn btn-primary regen-submit"><i data-lucide="refresh-cw"></i> Regenerate</button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer-small">
+                <div class="footer-group">
+                    <button class="btn btn-decline decline-btn" title="Decline this draft"><i data-lucide="x"></i> Decline</button>
+                    <button class="btn btn-outline regenerate-btn" title="Tell the AI what to change"><i data-lucide="refresh-cw"></i> Regenerate</button>
+                </div>
+                <div class="footer-group">
+                    <button class="btn btn-outline edit-btn">Edit</button>
+                    <button class="btn btn-primary approve-btn"><i data-lucide="check"></i> Approve</button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <script src="/static/app.js"></script>
+    <script src="/static/bulk.js"></script>
+    <script src="/static/inbox.js"></script>
+    <script src="/static/dashboard.js"></script>
+</body>
+
+</html>

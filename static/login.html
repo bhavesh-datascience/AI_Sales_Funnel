@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign in · Zeal Sales Funnel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        // Same theme as the app: saved choice, else the system setting
+        (function () {
+            let saved = null;
+            try { saved = localStorage.getItem('theme'); } catch (e) { /* storage unavailable */ }
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.dataset.theme = saved || (prefersDark ? 'dark' : 'light');
+        })();
+    </script>
+</head>
+
+<body class="login-body">
+    <main class="login-wrap">
+        <form class="login-card" id="loginForm" novalidate>
+            <div class="logo login-logo">
+                <div class="logo-icon">Z</div>
+                <span class="logo-text">Zeal Sales Funnel</span>
+            </div>
+            <div>
+                <h1 class="login-title">Welcome back</h1>
+                <p class="muted-text">Sign in to continue to your dashboard</p>
+            </div>
+
+            <div class="bulk-alert hidden" id="loginError" role="alert"></div>
+
+            <div class="form-field">
+                <label for="username">Username</label>
+                <input type="text" id="username" class="input" autocomplete="username" autofocus required>
+            </div>
+            <div class="form-field">
+                <label for="password">Password</label>
+                <div class="password-field">
+                    <input type="password" id="password" class="input" autocomplete="current-password" required>
+                    <button type="button" class="password-toggle" id="passwordToggle" aria-label="Show password" title="Show password">
+                        <i data-lucide="eye"></i>
+                    </button>
+                </div>
+            </div>
+
+            <label class="remember-row">
+                <input type="checkbox" id="remember"> Keep me signed in for 30 days
+            </label>
+
+            <button type="submit" class="btn btn-primary login-submit" id="loginBtn">
+                <i data-lucide="log-in"></i> Sign in
+            </button>
+        </form>
+    </main>
+
+    <script>
+        lucide.createIcons();
+        const form = document.getElementById('loginForm');
+        const errorBox = document.getElementById('loginError');
+        const password = document.getElementById('password');
+        const toggle = document.getElementById('passwordToggle');
+
+        toggle.addEventListener('click', () => {
+            const show = password.type === 'password';
+            password.type = show ? 'text' : 'password';
+            toggle.innerHTML = `<i data-lucide="${show ? 'eye-off' : 'eye'}"></i>`;
+            toggle.title = toggle.ariaLabel = show ? 'Hide password' : 'Show password';
+            lucide.createIcons();
+        });
+
+        form.addEventListener('submit', async e => {
+            e.preventDefault();
+            const username = document.getElementById('username').value.trim();
+            if (!username || !password.value) {
+                errorBox.textContent = 'Enter your username and password.';
+                errorBox.classList.remove('hidden');
+                return;
+            }
+
+            const btn = document.getElementById('loginBtn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner" style="width: 14px; height: 14px; border-width: 2px;"></div> Signing in...';
+            errorBox.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password: password.value, remember: document.getElementById('remember').checked })
+                });
+                if (!response.ok) {
+                    let detail = 'Could not sign in.';
+                    try { detail = (await response.json()).detail || detail; } catch (err) { /* not JSON */ }
+                    throw new Error(detail);
+                }
+                window.location.href = '/';
+            } catch (error) {
+                errorBox.textContent = error.message;
+                errorBox.classList.remove('hidden');
+                password.value = '';
+                password.focus();
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                lucide.createIcons();
+            }
+        });
+    </script>
+</body>
+
+</html>
