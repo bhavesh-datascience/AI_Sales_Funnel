@@ -95,7 +95,7 @@
                         <i data-lucide="user"></i>
                         <span>My Account</span>
                     </a>
-                    <a href="#" class="nav-item">
+                    <a href="#" class="nav-item" data-view="settings">
                         <i data-lucide="settings"></i>
                         <span>Settings</span>
                     </a>
@@ -717,6 +717,83 @@
                 </div>
             </div>
 
+            <!-- Settings View -->
+            <div id="view-settings" class="view-section hidden">
+                <div class="page-header">
+                    <div>
+                        <h1 class="page-title">Settings</h1>
+                        <p class="page-subtitle">How your emails look and sign off</p>
+                    </div>
+                </div>
+
+                <div class="settings-grid">
+                    <div class="bulk-card settings-card">
+                        <div class="settings-head">
+                            <div class="bulk-step-title"><i data-lucide="pen-line"></i> Email signature</div>
+                            <label class="switch">
+                                <input type="checkbox" id="sigEnabled" checked>
+                                <span class="switch-track"></span>
+                                <span class="switch-label">Add to every email</span>
+                            </label>
+                        </div>
+                        <p class="muted-text">Added to the bottom of every email you send: AI drafts, bulk emails and inbox replies.</p>
+
+                        <div class="form-field">
+                            <label for="sigSignOff">Sign-off (optional)</label>
+                            <textarea id="sigSignOff" class="input" rows="3" placeholder="Warm regards,&#10;Zeal Interactive Service"></textarea>
+                        </div>
+
+                        <div class="social-fields">
+                            <div class="form-field">
+                                <label for="sigInstagram">Instagram</label>
+                                <div class="icon-input">
+                                    <img src="/static/email-icons/instagram.png" alt="">
+                                    <input type="text" id="sigInstagram" class="input" placeholder="@yourhandle">
+                                </div>
+                            </div>
+                            <div class="form-field">
+                                <label for="sigWebsite">Website</label>
+                                <div class="icon-input">
+                                    <img src="/static/email-icons/website.png" alt="">
+                                    <input type="text" id="sigWebsite" class="input" placeholder="yourwebsite.com">
+                                </div>
+                            </div>
+                            <div class="form-field">
+                                <label for="sigLinkedin">LinkedIn</label>
+                                <div class="icon-input">
+                                    <img src="/static/email-icons/linkedin.png" alt="">
+                                    <input type="text" id="sigLinkedin" class="input" placeholder="linkedin.com/company/your-company">
+                                </div>
+                            </div>
+                            <div class="form-field">
+                                <label for="sigYoutube">YouTube</label>
+                                <div class="icon-input">
+                                    <img src="/static/email-icons/youtube.png" alt="">
+                                    <input type="text" id="sigYoutube" class="input" placeholder="@yourchannel">
+                                </div>
+                            </div>
+                        </div>
+                        <p class="muted-text">Leave a field empty to hide it. Links in the signature are fine for deliverability; keep the email body itself link-free.</p>
+
+                        <div class="bulk-alert hidden" id="sigError"></div>
+                        <div class="settings-actions">
+                            <span class="muted-text" id="sigStatus"></span>
+                            <button class="btn btn-primary" id="sigSaveBtn"><i data-lucide="save"></i> Save signature</button>
+                        </div>
+                    </div>
+
+                    <div class="bulk-card settings-card">
+                        <div class="bulk-step-title"><i data-lucide="eye"></i> Preview</div>
+                        <p class="muted-text">How the end of your emails will look</p>
+                        <div class="email-preview">
+                            <p>Hi Priya,</p>
+                            <p>Would you be open to a quick call next week about your team offsite?</p>
+                            <div class="sig-preview" id="sigPreview"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Follow-up View -->
             <div id="view-followup" class="view-section hidden">
                 <div class="page-header">
@@ -803,6 +880,7 @@
     <script src="/static/bulk.js"></script>
     <script src="/static/inbox.js"></script>
     <script src="/static/dashboard.js"></script>
+    <script src="/static/settings.js"></script>
 </body>
 
 </html>

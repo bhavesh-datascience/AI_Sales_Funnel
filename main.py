@@ -23,6 +23,7 @@ import smtplib
 import sqlite3
 import threading
 from collections import Counter
+from urllib.parse import urlparse
 from datetime import timedelta
 import hmac
 import hashlib
@@ -137,6 +138,10 @@ def init_db():
                 detail TEXT DEFAULT ''
             );
             CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            );
             CREATE TABLE IF NOT EXISTS replies (
                 email TEXT PRIMARY KEY,
                 reply_count INTEGER,
@@ -254,7 +259,7 @@ async def read_root(request: Request):
     # Show the logged-in user in the header
     page = page.replace("{{CURRENT_USER}}", html.escape(session_user(request) or ""))
     # Cache-busting: tag CSS/JS links with the file's modified time so browsers never use a stale copy
-    for asset in ("styles.css", "app.js", "bulk.js", "inbox.js", "dashboard.js"):
+    for asset in ("styles.css", "app.js", "bulk.js", "inbox.js", "dashboard.js", "settings.js"):
         version = int(os.path.getmtime(f"static/{asset}"))
         page = page.replace(f"/static/{asset}\"", f"/static/{asset}?v={version}\"")
     return page
@@ -450,13 +455,140 @@ def save_send_log(log: dict):
     with open(SEND_LOG_FILE, "w", encoding="utf-8") as f:
         json.dump(log, f)
 
+# ---------- Email signature (sign-off + social links with icons, added to every email) ----------
+
+EMAIL_ICON_DIR = os.path.join("static", "email-icons")
+SOCIAL_LINKS = [  # (key, label) in the order they appear at the bottom of the email
+    ("instagram", "Instagram"),
+    ("website", "Website"),
+    ("linkedin", "LinkedIn"),
+    ("youtube", "YouTube"),
+]
+
+def normalize_social(key: str, value: str) -> tuple[str, str]:
+    """Turn what the user typed into (url, display text). Raises ValueError if it can't be a safe link."""
+    value = value.strip()
+    if not value:
+        return "", ""
+    if key == "instagram" and not re.match(r"https?://", value, re.I):
+        handle = value.lstrip("@").strip("/")
+        if not re.fullmatch(r"[A-Za-z0-9._]{1,30}", handle):
+            raise ValueError("Instagram handle can only contain letters, numbers, dots and underscores.")
+        return f"https://instagram.com/{handle}", f"@{handle}"
+    if key == "youtube" and value.startswith("@"):
+        return f"https://www.youtube.com/{value}", value
+    if key == "linkedin" and re.match(r"(in|company)/", value):
+        value = f"https://www.linkedin.com/{value}"
+    url = value if re.match(r"https?://", value, re.I) else f"https://{value}"
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or "." not in parsed.netloc or re.search(r"[\s<>\"']", url):
+        raise ValueError(f"That doesn't look like a valid {key} link.")
+    if key == "instagram":
+        handle = parsed.path.strip("/").split("/")[0]
+        return url, f"@{handle}" if handle else "Instagram"
+    if key == "website":
+        return url, (parsed.netloc + parsed.path).removeprefix("www.").rstrip("/")
+    if key == "youtube":
+        handle = parsed.path.strip("/").split("/")[0]
+        return url, handle if handle.startswith("@") else "YouTube"
+    return url, "LinkedIn"
+
+def load_signature() -> dict:
+    try:
+        with db_lock, db_connect() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key = 'signature'").fetchone()
+        return json.loads(row["value"]) if row else {}
+    except Exception as e:
+        print(f"Could not load signature: {e}")
+        return {}
+
+def signature_links(signature: dict) -> list[dict]:
+    links = []
+    for key, label in SOCIAL_LINKS:
+        try:
+            url, text = normalize_social(key, signature.get(key, ""))
+        except ValueError:
+            continue  # saved values were validated; skip anything that no longer parses
+        if url:
+            links.append({"key": key, "label": label, "url": url, "text": text})
+    return links
+
+def signature_text(signature: dict) -> str:
+    if not signature.get("enabled"):
+        return ""
+    lines = [signature.get("sign_off", "").strip()] if signature.get("sign_off", "").strip() else []
+    lines += [f"{l['label']}: {l['url']}" for l in signature_links(signature)]
+    return "\n\n" + "\n".join(lines) if lines else ""
+
+def signature_html(signature: dict) -> tuple[str, list[tuple[str, str]]]:
+    """Email-safe signature block (tables + inline styles) and the inline icons it needs as (cid, icon name)."""
+    if not signature.get("enabled"):
+        return "", []
+    sign_off = signature.get("sign_off", "").strip()
+    links = signature_links(signature)
+    if not sign_off and not links:
+        return "", []
+    icons, cells = [], []
+    for link in links:
+        cid = make_msgid(idstring=link["key"], domain="zeal.signature")[1:-1]
+        icons.append((cid, link["key"]))
+        cells.append(
+            f'<td style="padding: 0 16px 6px 0; white-space: nowrap;">'
+            f'<a href="{html.escape(link["url"])}" style="color: #1a5fb4; text-decoration: none; font-size: 13px;">'
+            f'<img src="cid:{cid}" width="18" height="18" alt="{link["label"]}" '
+            f'style="vertical-align: middle; border: 0; margin-right: 6px;">{html.escape(link["text"])}</a></td>'
+        )
+    sign_off_row = (
+        f'<tr><td style="padding-bottom: 10px; font-size: 14px; color: #222;">{html.escape(sign_off).replace(chr(10), "<br>")}</td></tr>'
+        if sign_off else ""
+    )
+    links_row = (
+        f'<tr><td><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>{"".join(cells)}</tr></table></td></tr>'
+        if cells else ""
+    )
+    return (
+        f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
+        f'style="margin-top: 20px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-family: Arial, sans-serif;">'
+        f'{sign_off_row}{links_row}</table>'
+    ), icons
+
+class SignatureSettings(BaseModel):
+    enabled: bool = True
+    sign_off: str = ""
+    instagram: str = ""
+    website: str = ""
+    linkedin: str = ""
+    youtube: str = ""
+
+@app.get("/api/settings/signature")
+def get_signature():
+    saved = load_signature()
+    return {**SignatureSettings(**saved).model_dump(), "links": signature_links(saved)}
+
+@app.put("/api/settings/signature")
+def save_signature(req: SignatureSettings):
+    data = req.model_dump()
+    data["sign_off"] = data["sign_off"].strip()[:500]
+    for key, label in SOCIAL_LINKS:
+        try:
+            normalize_social(key, data[key])
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"{label}: {e}")
+        data[key] = data[key].strip()
+    with db_lock, db_connect() as conn:
+        conn.execute("INSERT INTO settings (key, value) VALUES ('signature', ?) "
+                     "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (json.dumps(data),))
+    return {**data, "links": signature_links(data)}
+
 def build_message(req: SendEmailRequest, gmail_address: str) -> EmailMessage:
     from_name = os.environ.get("EMAIL_FROM_NAME", "Zeal Interactive Service")
     reply_to = os.environ.get("EMAIL_REPLY_TO") or gmail_address
     footer = os.environ.get("EMAIL_FOOTER", "If you'd prefer not to receive emails from us, just reply with \"unsubscribe\".")
 
     is_reply = bool(req.in_reply_to)
-    text_body = req.body.strip()
+    body = req.body.strip()
+    signature = load_signature()
+    text_body = body + signature_text(signature)
     # Replies are part of a conversation, so they don't get the opt-out footer
     if footer and not is_reply:
         text_body += f"\n\n--\n{footer}"
@@ -478,18 +610,29 @@ def build_message(req: SendEmailRequest, gmail_address: str) -> EmailMessage:
 
     # Send both plain text and HTML; HTML-only or text-only bulk mail scores worse with spam filters
     msg.set_content(text_body)
-    paragraphs = "".join(
-        f"<p>{html.escape(p).replace(chr(10), '<br>')}</p>" for p in text_body.split("\n\n") if p.strip()
+    to_html = lambda text: "".join(
+        f"<p>{html.escape(p).replace(chr(10), '<br>')}</p>" for p in text.split("\n\n") if p.strip()
+    )
+    signature_markup, icons = signature_html(signature)
+    footer_markup = (
+        f'<p style="margin-top: 18px; font-size: 12px; color: #888;">{html.escape(footer)}</p>'
+        if footer and not is_reply else ""
     )
     msg.add_alternative(
-        f'<html><body style="font-family: Arial, sans-serif; font-size: 14px; color: #222;">{paragraphs}</body></html>',
+        f'<html><body style="font-family: Arial, sans-serif; font-size: 14px; color: #222;">'
+        f'{to_html(body)}{signature_markup}{footer_markup}</body></html>',
         subtype="html",
     )
+    # Icons travel inside the email (inline images), so they show without "display images" and can't break
+    html_part = msg.get_payload()[1]
+    for cid, name in icons:
+        with open(os.path.join(EMAIL_ICON_DIR, f"{name}.png"), "rb") as f:
+            html_part.add_related(f.read(), maintype="image", subtype="png", cid=f"<{cid}>", filename=f"{name}.png")
     return msg
 
 def smtp_send(msg: EmailMessage, gmail_address: str, app_password: str):
     # 465 = TLS from the first byte, 587 = STARTTLS; Gmail accepts App Passwords on both
-    port = int(os.environ.get("SMTP_PORT", "465"))
+    port = int(os.environ.get("SMTP_PORT", "587"))
     context = ssl.create_default_context()
     if port == 465:
         server = smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30, context=context)
